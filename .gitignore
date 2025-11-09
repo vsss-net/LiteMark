@@ -6,6 +6,5 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 dist
-.env.local
 *.log
 .DS_Store
