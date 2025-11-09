@@ -1,5 +1,5 @@
-import { list, put } from '@vercel/blob';
 import { randomUUID } from 'crypto';
+import { readJson, writeJson } from './storage.js';
 
 export type BookmarkRecord = {
   id: string;
@@ -24,50 +24,20 @@ type SettingsData = {
   theme: string;
 };
 
-const BOOKMARKS_BLOB_KEY = process.env.BLOB_BOOKMARKS_KEY ?? 'data/bookmarks.json';
-const SETTINGS_BLOB_KEY = process.env.BLOB_SETTINGS_KEY ?? 'data/settings.json';
-
-async function readBlobJson<T>(key: string, fallback: T): Promise<T> {
-  try {
-    const { blobs } = await list({ prefix: key, limit: 1 });
-    const blob = blobs.find((item) => item.pathname === key);
-    if (!blob) {
-      return fallback;
-    }
-    const response = await fetch(blob.downloadUrl);
-    if (!response.ok) {
-      throw new Error(`读取 Blob 失败：${response.status}`);
-    }
-    return (await response.json()) as T;
-  } catch (error) {
-    console.error(`读取 ${key} 失败`, error);
-    return fallback;
-  }
-}
-
-async function writeBlobJson(key: string, data: unknown) {
-  const body = JSON.stringify(data, null, 2);
-  await put(key, body, {
-    access: 'public',
-    contentType: 'application/json',
-    addRandomSuffix: false
-  });
-}
-
 async function loadBookmarks(): Promise<BookmarkRecord[]> {
-  return readBlobJson<BookmarkRecord[]>(BOOKMARKS_BLOB_KEY, []);
+  return readJson('bookmarks', [] as BookmarkRecord[]);
 }
 
 async function saveBookmarks(bookmarks: BookmarkRecord[]) {
-  await writeBlobJson(BOOKMARKS_BLOB_KEY, bookmarks);
+  await writeJson('bookmarks', bookmarks);
 }
 
 async function loadSettings(): Promise<SettingsData> {
-  return readBlobJson<SettingsData>(SETTINGS_BLOB_KEY, { theme: 'light' });
+  return readJson('settings', { theme: 'light' });
 }
 
 async function saveSettings(settings: SettingsData) {
-  await writeBlobJson(SETTINGS_BLOB_KEY, settings);
+  await writeJson('settings', settings);
 }
 
 export async function listBookmarks(): Promise<BookmarkRecord[]> {

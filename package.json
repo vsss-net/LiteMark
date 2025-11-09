@@ -9,9 +9,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.678.0",
     "@vercel/blob": "^0.25.0",
     "jsonwebtoken": "^9.0.2",
-    "vue": "^3.5.12"
+    "vue": "^3.5.12",
+    "webdav": "^5.7.0"
   },
   "devDependencies": {
     "@types/jsonwebtoken": "^9.0.6",
