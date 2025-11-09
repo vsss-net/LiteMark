@@ -139,6 +139,19 @@ async function saveBookmarks(bookmarks: BookmarkRecord[]) {
   ensureBookmarksRefreshTimer();
 }
 
+export async function forceRefreshBookmarksCache(): Promise<BookmarkRecord[]> {
+  if (bookmarksRefreshTimer) {
+    clearTimeout(bookmarksRefreshTimer);
+    bookmarksRefreshTimer = null;
+  }
+  const data = await readJson('bookmarks', [] as BookmarkRecord[]);
+  bookmarksCache = {
+    value: data
+  };
+  ensureBookmarksRefreshTimer();
+  return [...data];
+}
+
 async function loadSettings(): Promise<SettingsData> {
   if (settingsCache) {
     ensureSettingsRefreshTimer();

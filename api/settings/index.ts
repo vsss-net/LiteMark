@@ -6,7 +6,7 @@ import {
   sendError,
   sendJson
 } from '../_lib/http.js';
-import { forceRefreshSettingsCache, getSettings, updateSettings } from '../_lib/db.js';
+import { getSettings, updateSettings } from '../_lib/db.js';
 import { requireAuth } from '../_lib/auth.js';
 
 type SettingsBody = {
@@ -30,21 +30,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } catch (error) {
       console.error('获取站点设置失败', error);
       sendError(res, 500, '获取站点设置失败');
-    }
-    return;
-  }
-
-  if (req.method === 'POST' && req.url?.endsWith('/refresh')) {
-    const auth = requireAuth(req, res);
-    if (!auth) {
-      return;
-    }
-    try {
-      const settings = await forceRefreshSettingsCache();
-      sendJson(res, 200, settings);
-    } catch (error) {
-      console.error('刷新站点设置缓存失败', error);
-      sendError(res, 500, '刷新站点设置缓存失败');
     }
     return;
   }

@@ -614,13 +614,22 @@ function openBookmark(bookmark: Bookmark) {
         <h1>{{ siteTitleDisplay }}</h1>
       </div>
       <div class="topbar__actions">
-        <div class="theme-switcher">
+        <button
+          v-if="isAuthenticated"
+          class="button button--ghost"
+          type="button"
+          :disabled="loading"
+          @click="loadBookmarks"
+        >
+          {{ loading ? '加载中...' : '刷新数据' }}
+        </button>
+        <div v-if="isAuthenticated" class="theme-switcher">
           <label>
             <span>主题</span>
             <select
               v-model="selectedTheme"
               @change="handleThemeChange"
-              :disabled="themeSaving || !isAuthenticated"
+              :disabled="themeSaving"
             >
               <option v-for="option in themeOptions" :key="option.value" :value="option.value">
                 {{ option.label }}
@@ -628,7 +637,6 @@ function openBookmark(bookmark: Bookmark) {
             </select>
           </label>
           <span v-if="themeSaving" class="theme-switcher__status">保存中...</span>
-          <span v-else-if="!isAuthenticated" class="theme-switcher__status">登录后可切换</span>
         </div>
         <button
           v-if="isAuthenticated"
@@ -662,9 +670,6 @@ function openBookmark(bookmark: Bookmark) {
             placeholder="搜索书签..."
             @keydown.enter.prevent="loadBookmarks"
           />
-          <button class="button button--ghost" @click="loadBookmarks" :disabled="loading">
-            {{ loading ? '加载中...' : '刷新' }}
-          </button>
         </div>
       </section>
 

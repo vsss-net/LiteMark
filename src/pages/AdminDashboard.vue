@@ -543,6 +543,40 @@ function goHome() {
   router.push({ name: 'home' });
 }
 
+const cacheRefreshing = ref(false);
+const cacheMessage = ref('');
+
+async function refreshData() {
+  if (!isAuthenticated.value || cacheRefreshing.value) {
+    if (!isAuthenticated.value) {
+      showLoginModal.value = true;
+    }
+    return;
+  }
+  cacheRefreshing.value = true;
+  cacheMessage.value = '';
+  try {
+    const [settingsResponse, bookmarksResponse] = await Promise.all([
+      requestWithAuth(`${apiBase}/api/settings/refresh`, { method: 'POST' }),
+      requestWithAuth(`${apiBase}/api/bookmarks/refresh`, { method: 'POST' })
+    ]);
+    if (!settingsResponse.ok) {
+      const message = await settingsResponse.text();
+      throw new Error(message || '刷新站点设置缓存失败');
+    }
+    if (!bookmarksResponse.ok) {
+      const message = await bookmarksResponse.text();
+      throw new Error(message || '刷新书签缓存失败');
+    }
+    await Promise.all([loadSettings(), loadBookmarks()]);
+    cacheMessage.value = '数据已刷新';
+  } catch (error) {
+    cacheMessage.value = error instanceof Error ? error.message : '刷新失败';
+  } finally {
+    cacheRefreshing.value = false;
+  }
+}
+
 onMounted(() => {
   if (!isAuthenticated.value) {
     showLoginModal.value = true;
@@ -654,9 +688,9 @@ onMounted(() => {
                 class="button button--ghost"
                 type="button"
                 :disabled="cacheRefreshing || !isAuthenticated"
-                @click="refreshSettingsCache"
+                @click="refreshData"
               >
-                {{ cacheRefreshing ? '刷新中...' : '刷新缓存' }}
+                {{ cacheRefreshing ? '刷新中...' : '刷新数据' }}
               </button>
             </div>
           </form>
