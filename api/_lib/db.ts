@@ -37,7 +37,6 @@ const BOOKMARKS_CACHE_TTL = Number(process.env.BOOKMARKS_CACHE_TTL_MS ?? '60000'
 
 type SettingsCache = {
   value: SettingsData;
-  expiresAt: number;
 };
 
 let settingsCache: SettingsCache | null = null;
@@ -45,18 +44,16 @@ let settingsRefreshTimer: NodeJS.Timeout | null = null;
 
 type BookmarksCache = {
   value: BookmarkRecord[];
-  expiresAt: number;
 };
 
 let bookmarksCache: BookmarksCache | null = null;
+let bookmarksRefreshTimer: NodeJS.Timeout | null = null;
 
 function refreshSettingsCache() {
   readJson('settings', DEFAULT_SETTINGS)
     .then((settings) => {
-      const now = Date.now();
       settingsCache = {
-        value: settings,
-        expiresAt: SETTINGS_CACHE_TTL > 0 ? now + SETTINGS_CACHE_TTL : now
+        value: settings
       };
     })
     .catch((error) => {
@@ -75,10 +72,8 @@ export async function forceRefreshSettingsCache(): Promise<SettingsData> {
     settingsRefreshTimer = null;
   }
   const settings = await readJson('settings', DEFAULT_SETTINGS);
-  const now = Date.now();
   settingsCache = {
-    value: settings,
-    expiresAt: SETTINGS_CACHE_TTL > 0 ? now + SETTINGS_CACHE_TTL : now
+    value: settings
   };
   ensureSettingsRefreshTimer();
   return settings;
@@ -93,37 +88,65 @@ function ensureSettingsRefreshTimer() {
   }
 }
 
+function refreshBookmarksCache() {
+  readJson('bookmarks', [] as BookmarkRecord[])
+    .then((records) => {
+      bookmarksCache = {
+        value: records
+      };
+    })
+    .catch((error) => {
+      console.error('刷新书签缓存失败：', error);
+    })
+    .finally(() => {
+      if (BOOKMARKS_CACHE_TTL > 0) {
+        bookmarksRefreshTimer = setTimeout(refreshBookmarksCache, BOOKMARKS_CACHE_TTL);
+      }
+    });
+}
+
+function ensureBookmarksRefreshTimer() {
+  if (BOOKMARKS_CACHE_TTL <= 0) {
+    return;
+  }
+  if (!bookmarksRefreshTimer) {
+    bookmarksRefreshTimer = setTimeout(refreshBookmarksCache, BOOKMARKS_CACHE_TTL);
+  }
+}
+
 async function loadBookmarks(): Promise<BookmarkRecord[]> {
-  const now = Date.now();
-  if (bookmarksCache && bookmarksCache.expiresAt > now) {
+  if (bookmarksCache) {
+    ensureBookmarksRefreshTimer();
     return [...bookmarksCache.value];
   }
   const data = await readJson('bookmarks', [] as BookmarkRecord[]);
   bookmarksCache = {
-    value: data,
-    expiresAt: BOOKMARKS_CACHE_TTL > 0 ? now + BOOKMARKS_CACHE_TTL : now
+    value: data
   };
+  ensureBookmarksRefreshTimer();
   return [...data];
 }
 
 async function saveBookmarks(bookmarks: BookmarkRecord[]) {
   await writeJson('bookmarks', bookmarks);
-  const now = Date.now();
   bookmarksCache = {
-    value: [...bookmarks],
-    expiresAt: BOOKMARKS_CACHE_TTL > 0 ? now + BOOKMARKS_CACHE_TTL : now
+    value: [...bookmarks]
   };
+  if (bookmarksRefreshTimer) {
+    clearTimeout(bookmarksRefreshTimer);
+    bookmarksRefreshTimer = null;
+  }
+  ensureBookmarksRefreshTimer();
 }
 
 async function loadSettings(): Promise<SettingsData> {
-  const now = Date.now();
-  if (settingsCache && settingsCache.expiresAt > now) {
+  if (settingsCache) {
+    ensureSettingsRefreshTimer();
     return settingsCache.value;
   }
   const settings = await readJson('settings', DEFAULT_SETTINGS);
   settingsCache = {
-    value: settings,
-    expiresAt: SETTINGS_CACHE_TTL > 0 ? now + SETTINGS_CACHE_TTL : now
+    value: settings
   };
   ensureSettingsRefreshTimer();
   return settings;
@@ -131,10 +154,8 @@ async function loadSettings(): Promise<SettingsData> {
 
 async function saveSettings(settings: SettingsData) {
   await writeJson('settings', settings);
-  const now = Date.now();
   settingsCache = {
-    value: settings,
-    expiresAt: SETTINGS_CACHE_TTL > 0 ? now + SETTINGS_CACHE_TTL : now
+    value: settings
   };
   if (settingsRefreshTimer) {
     clearTimeout(settingsRefreshTimer);
@@ -161,6 +182,7 @@ export async function updateSettings(partial: Partial<SettingsData>): Promise<Se
 }
 
 ensureSettingsRefreshTimer();
+ensureBookmarksRefreshTimer();
 
 export async function listBookmarks(): Promise<BookmarkRecord[]> {
   return loadBookmarks();
