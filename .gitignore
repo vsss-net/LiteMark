@@ -1,9 +1,11 @@
 node_modules
-.npm
+.vercel
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 dist
+.env.local
 *.log
-frontend/dist
-backend/node_modules
-frontend/node_modules
 .DS_Store
 
