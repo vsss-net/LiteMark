@@ -1,11 +1,11 @@
 import { list, put } from '@vercel/blob';
-import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { OSSClient, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-oss';
 import { createClient as createWebdavClient } from 'webdav';
 
 const DRIVER = (process.env.STORAGE_DRIVER ?? 'vercel-blob').toLowerCase();
 
-const BOOKMARKS_KEY = process.env.BOOKMARKS_KEY ?? 'data/bookmarks.json';
-const SETTINGS_KEY = process.env.SETTINGS_KEY ?? 'data/settings.json';
+const BOOKMARKS_KEY = process.env.BOOKMARKS_KEY ?? 'litemark/data/bookmarks.json';
+const SETTINGS_KEY = process.env.SETTINGS_KEY ?? 'litemark/data/settings.json';
 
 function getKeys() {
   return { bookmarksKey: BOOKMARKS_KEY, settingsKey: SETTINGS_KEY };
@@ -33,23 +33,23 @@ async function writeVercelBlob(key: string, data: unknown) {
   });
 }
 
-let s3Client: S3Client | null = null;
+let ossClient: OSSClient | null = null;
 let webdavClient: ReturnType<typeof createWebdavClient> | null = null;
 
-function ensureS3Client(): S3Client {
-  if (!s3Client) {
-    const region = process.env.S3_REGION;
-    const bucket = process.env.S3_BUCKET;
-    const accessKeyId = process.env.S3_ACCESS_KEY_ID;
-    const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY;
-    const endpoint = process.env.S3_ENDPOINT;
-    const forcePathStyle = process.env.S3_FORCE_PATH_STYLE === 'true';
+function ensureOSSClient(): OSSClient {
+  if (!ossClient) {
+    const region = process.env.OSS_REGION;
+    const bucket = process.env.OSS_BUCKET;
+    const accessKeyId = process.env.OSS_ACCESS_KEY_ID;
+    const secretAccessKey = process.env.OSS_SECRET_ACCESS_KEY;
+    const endpoint = process.env.OSS_ENDPOINT;
+    const forcePathStyle = process.env.OSS_FORCE_PATH_STYLE === 'true';
 
     if (!region || !bucket || !accessKeyId || !secretAccessKey) {
-      throw new Error('S3 配置缺失：请设置 S3_REGION、S3_BUCKET、S3_ACCESS_KEY_ID、S3_SECRET_ACCESS_KEY');
+      throw new Error('OSS 配置缺失：请设置 OSS_REGION、OSS_BUCKET、OSS_ACCESS_KEY_ID、OSS_SECRET_ACCESS_KEY');
     }
 
-    s3Client = new S3Client({
+    ossClient = new OSSClient({
       region,
       endpoint,
       forcePathStyle,
@@ -59,7 +59,7 @@ function ensureS3Client(): S3Client {
       }
     });
   }
-  return s3Client;
+  return ossClient;
 }
 
 function ensureWebdavClient() {
@@ -80,9 +80,9 @@ function ensureWebdavClient() {
   return webdavClient;
 }
 
-async function readS3Json<T>(key: string, fallback: T): Promise<T> {
-  const client = ensureS3Client();
-  const bucket = process.env.S3_BUCKET!;
+async function readOSSJson<T>(key: string, fallback: T): Promise<T> {
+  const client = ensureOSSClient();
+  const bucket = process.env.OSS_BUCKET!;
   try {
     const result = await client.send(
       new GetObjectCommand({ Bucket: bucket, Key: key })
@@ -96,14 +96,14 @@ async function readS3Json<T>(key: string, fallback: T): Promise<T> {
     if (error?.$metadata?.httpStatusCode === 404) {
       return fallback;
     }
-    console.error('读取 S3 失败：', error);
+    console.error('读取OSS失败：', error);
     return fallback;
   }
 }
 
-async function writeS3Json(key: string, data: unknown) {
-  const client = ensureS3Client();
-  const bucket = process.env.S3_BUCKET!;
+async function writeOSSJson(key: string, data: unknown) {
+  const client = ensureOSSClient();
+  const bucket = process.env.OSS_BUCKET!;
   await client.send(
     new PutObjectCommand({
       Bucket: bucket,
@@ -142,8 +142,8 @@ async function writeWebdavJson(key: string, data: unknown) {
 export async function readJson<T>(key: 'bookmarks' | 'settings', fallback: T): Promise<T> {
   const { bookmarksKey, settingsKey } = getKeys();
   const resolvedKey = key === 'bookmarks' ? bookmarksKey : settingsKey;
-  if (DRIVER === 's3') {
-    return readS3Json(resolvedKey, fallback);
+  if (DRIVER === 'oss') {
+    return readOSSJson(resolvedKey, fallback);
   }
   if (DRIVER === 'webdav') {
     return readWebdavJson(resolvedKey, fallback);
@@ -154,8 +154,8 @@ export async function readJson<T>(key: 'bookmarks' | 'settings', fallback: T): P
 export async function writeJson(key: 'bookmarks' | 'settings', data: unknown) {
   const { bookmarksKey, settingsKey } = getKeys();
   const resolvedKey = key === 'bookmarks' ? bookmarksKey : settingsKey;
-  if (DRIVER === 's3') {
-    await writeS3Json(resolvedKey, data);
+  if (DRIVER === 'oss') {
+    await writeOSSJson(resolvedKey, data);
     return;
   }
   if (DRIVER === 'webdav') {
