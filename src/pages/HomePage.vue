@@ -305,6 +305,9 @@ async function loadBookmarks() {
   try {
     const response = await fetch(endpoint);
     if (!response.ok) {
+      if (response.status === 304) {
+        return;
+      }
       throw new Error(`加载失败：${response.status}`);
     }
     const data = (await response.json()) as Bookmark[];
