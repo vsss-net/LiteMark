@@ -15,77 +15,12 @@ LiteMark 是一款基于 **Vue 3 + Vite** 的个人书签管理应用，提供�
 
 ---
 
-## 快速开始
-
-```bash
-# 安装依赖
-npm install
-# pnpm / yarn / bun 亦可
-
-# 开发模式（仅前端）
-npm run dev
-
-# 生产构建
-npm run build
-
-# 本地预览生产包
-npm run preview
-```
-
-> `npm run dev` 只启动 Vite 前端，如需同时调试 API，请参见「本地调试」章节。
-
----
-
-## 本地调试与开发
-
-### 1. 前端 + 线上 API
-- 在 `.env.local` 设置 `VITE_API_BASE_URL=https://<你的部署域名>`。
-- 运行 `npm run dev`，前端会直接调用线上 API。
-
-### 2. 同步调试前端与 Functions
-- 安装 [Vercel CLI](https://vercel.com/docs/cli)：`npm i -g vercel`。
-- 根目录执行 `vercel dev`（保持 `vercel.json` 存在），CLI 会启动 3000 端口的 API 代理与前端构建。
-- 如果已有本地占用，可指定端口：`vercel dev --listen 127.0.0.1:3005`。
-
-### 3. 仅调试 Functions
-- 保留 `vercel.json` 中的 `functions` 配置，并在根目录运行：
-  ```bash
-  vercel dev --yes
-  ```
-- 前端可通过 `VITE_API_BASE_URL=http://127.0.0.1:<端口>` 访问本地函数。
-
----
-
 ## 部署到 Vercel
 
 1. **Fork / Clone** 仓库，并推送至自己的 Git 仓库。
 2. 在 Vercel 创建新项目，导入仓库。
 3. 项目设置 → **Environment Variables**，填入 `.env.local` 中的变量（见下表）。
-4. 确保仓库根目录存在 `vercel.json`，内容如下：
-   ```json
-   {
-     "functions": {
-       "api/**/*.ts": {
-         "runtime": "@vercel/node@3.2.8"
-       }
-     },
-     "rewrites": [
-       { "source": "/api/(.*)", "destination": "/api/$1" },
-       { "source": "/(.*)", "destination": "/" }
-     ],
-     "headers": [
-       {
-         "source": "/(.*)\\.(js|css|json|svg|png|jpg|jpeg|gif|webp|ico|woff2?)",
-         "headers": [
-           { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, max-age=0" },
-           { "key": "Pragma", "value": "no-cache" },
-           { "key": "Expires", "value": "0" }
-         ]
-       }
-     ]
-   }
-   ```
-5. 点击 **Deploy**，等待构建完成。前端地址为 `https://<project>.vercel.app`，后台入口 `https://<project>.vercel.app/admin`。
+4. 点击 **Deploy**，等待构建完成。前端地址为 `https://<project>.vercel.app`，后台入口 `https://<project>.vercel.app/admin`。
 
 > 若部署后 `/api` 返回静态页面或 404，多半是 `vercel.json` 不存在或命名错误（确保文件名为 `vercel.json`）。
 
@@ -119,7 +54,7 @@ npm run preview
 │  └─ _lib/                 # 鉴权、存储、缓存等辅助模块
 ├─ src/
 │  ├─ pages/
-│  │  ├─ HomePage.vue       # 前台书签展示、搜索、拖拽排序
+│  │  ├─ HomePage.vue       # 前台书签展示
 │  │  └─ AdminDashboard.vue # 后台管理面板
 │  ├─ App.vue               # 路由容器
 │  └─ main.ts               # 应用入口
