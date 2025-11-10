@@ -5,7 +5,10 @@ const DEFAULT_ALLOWED_ORIGIN = process.env.CORS_ORIGIN ?? '*';
 export function applyCors(res: VercelResponse, methods = 'GET,POST,PUT,DELETE,OPTIONS') {
   res.setHeader('Access-Control-Allow-Origin', DEFAULT_ALLOWED_ORIGIN);
   res.setHeader('Access-Control-Allow-Methods', methods);
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'Content-Type, Authorization, Cache-Control'
+  );
   res.setHeader('Access-Control-Allow-Credentials', 'true');
 }
 

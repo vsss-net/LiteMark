@@ -8,7 +8,6 @@ export type BookmarkRecord = {
   category?: string;
   description?: string;
   visible: boolean;
-  weight: number;
 };
 
 type BookmarkInput = {
@@ -41,12 +40,33 @@ type SettingsCache = {
 let settingsCache: SettingsCache | null = null;
 let settingsRefreshTimer: NodeJS.Timeout | null = null;
 
+type StoredBookmark = BookmarkRecord & { weight?: number };
+
 type BookmarksCache = {
   value: BookmarkRecord[];
 };
 
 let bookmarksCache: BookmarksCache | null = null;
 let bookmarksRefreshTimer: NodeJS.Timeout | null = null;
+
+function normalizeCategoryValue(value?: string | null): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function bookmarkCategoryKey(bookmark: BookmarkRecord | StoredBookmark): string {
+  return normalizeCategoryValue(bookmark.category) ?? '';
+}
+
+function normalizeCategoryKeyInput(value: unknown): string {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  return value.trim();
+}
 
 function refreshSettingsCache() {
   readJson('settings', DEFAULT_SETTINGS)
@@ -88,10 +108,10 @@ function ensureSettingsRefreshTimer() {
 }
 
 function refreshBookmarksCache() {
-  readJson('bookmarks', [] as BookmarkRecord[])
+  readJson('bookmarks', [] as StoredBookmark[])
     .then((records) => {
       bookmarksCache = {
-        value: records
+        value: records.map(stripWeight)
       };
     })
     .catch((error) => {
@@ -118,27 +138,41 @@ async function loadBookmarks(): Promise<BookmarkRecord[]> {
     ensureBookmarksRefreshTimer();
     return [...bookmarksCache.value];
   }
-  const data = await readJson('bookmarks', [] as BookmarkRecord[]);
+  const data = await readJson('bookmarks', [] as StoredBookmark[]);
+  const sanitized = data.map(stripWeight);
   bookmarksCache = {
-    value: data
+    value: sanitized
   };
   ensureBookmarksRefreshTimer();
-  return [...data];
+  return [...sanitized];
 }
 
 async function loadBookmarksFresh(): Promise<BookmarkRecord[]> {
-  const data = await readJson('bookmarks', [] as BookmarkRecord[]);
+  const data = await readJson('bookmarks', [] as StoredBookmark[]);
+  const sanitized = data.map(stripWeight);
   bookmarksCache = {
-    value: data
+    value: sanitized
   };
   ensureBookmarksRefreshTimer();
-  return [...data];
+  return [...sanitized];
+}
+
+function stripWeight(bookmark: StoredBookmark): BookmarkRecord {
+  const { weight: _weight, ...rest } = bookmark;
+  return {
+    ...rest,
+    category: normalizeCategoryValue(rest.category)
+  };
 }
 
 async function saveBookmarks(bookmarks: BookmarkRecord[]) {
-  await writeJson('bookmarks', bookmarks);
+  const sanitized = bookmarks.map((bookmark) => ({
+    ...bookmark,
+    category: normalizeCategoryValue(bookmark.category)
+  }));
+  await writeJson('bookmarks', sanitized);
   bookmarksCache = {
-    value: [...bookmarks]
+    value: sanitized
   };
   if (bookmarksRefreshTimer) {
     clearTimeout(bookmarksRefreshTimer);
@@ -152,12 +186,13 @@ export async function forceRefreshBookmarksCache(): Promise<BookmarkRecord[]> {
     clearTimeout(bookmarksRefreshTimer);
     bookmarksRefreshTimer = null;
   }
-  const data = await readJson('bookmarks', [] as BookmarkRecord[]);
+  const data = await readJson('bookmarks', [] as StoredBookmark[]);
+  const sanitized = data.map(stripWeight);
   bookmarksCache = {
-    value: data
+    value: sanitized
   };
   ensureBookmarksRefreshTimer();
-  return [...data];
+  return [...sanitized];
 }
 
 async function loadSettings(): Promise<SettingsData> {
@@ -211,20 +246,15 @@ export async function listBookmarks(): Promise<BookmarkRecord[]> {
 
 export async function createBookmark(data: BookmarkInput): Promise<BookmarkRecord> {
   const bookmarks = await loadBookmarksFresh();
-  let nextWeight = 1;
-  if (bookmarks.length > 0) {
-    nextWeight = Math.max(...bookmarks.map((item) => item.weight ?? 0)) + 1;
-  }
   const bookmark: BookmarkRecord = {
     id: randomUUID(),
     title: data.title,
     url: data.url,
-    category: data.category,
+    category: normalizeCategoryValue(data.category),
     description: data.description,
-    visible: data.visible,
-    weight: nextWeight
+    visible: data.visible
   };
-  bookmarks.unshift(bookmark);
+  bookmarks.push(bookmark);
   await saveBookmarks(bookmarks);
   return bookmark;
 }
@@ -237,21 +267,55 @@ export async function reorderBookmarks(order: string[]): Promise<BookmarkRecord[
   });
 
   const reordered: BookmarkRecord[] = [];
-  let weight = 1;
   order.forEach((id) => {
     const record = map.get(id);
     if (record) {
-      reordered.push({ ...record, weight });
+      reordered.push(record);
       map.delete(id);
-      weight += 1;
     }
   });
 
+  map.forEach((bookmark) => {
+    reordered.push(bookmark);
+  });
+
+  await saveBookmarks(reordered);
+  return reordered;
+}
+
+export async function reorderBookmarkCategories(order: string[]): Promise<BookmarkRecord[]> {
+  const bookmarks = await loadBookmarksFresh();
+  const categoryMap = new Map<string, BookmarkRecord[]>();
+  const originalOrder: string[] = [];
+
   bookmarks.forEach((bookmark) => {
-    if (map.has(bookmark.id)) {
-      reordered.push({ ...bookmark, weight });
-      weight += 1;
-      map.delete(bookmark.id);
+    const key = bookmarkCategoryKey(bookmark);
+    if (!categoryMap.has(key)) {
+      categoryMap.set(key, []);
+      originalOrder.push(key);
+    }
+    categoryMap.get(key)!.push(bookmark);
+  });
+
+  const requestedOrder: string[] = [];
+  order.forEach((value) => {
+    const key = normalizeCategoryKeyInput(value);
+    if (categoryMap.has(key) && !requestedOrder.includes(key)) {
+      requestedOrder.push(key);
+    }
+  });
+
+  originalOrder.forEach((key) => {
+    if (!requestedOrder.includes(key)) {
+      requestedOrder.push(key);
+    }
+  });
+
+  const reordered: BookmarkRecord[] = [];
+  requestedOrder.forEach((key) => {
+    const items = categoryMap.get(key);
+    if (items) {
+      reordered.push(...items);
     }
   });
 
@@ -273,7 +337,7 @@ export async function updateBookmark(
     ...existing,
     title: data.title,
     url: data.url,
-    category: data.category,
+    category: normalizeCategoryValue(data.category),
     description: data.description,
     visible: data.visible
   };
