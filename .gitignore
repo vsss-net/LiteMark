@@ -11,3 +11,6 @@ dist
 .DS_Store
 .env.local
 extension
+.dev.vars
+dist-worker
+.wrangler
