@@ -28,7 +28,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    if (!validateAdminCredentials(username, password)) {
+    const isValid = await validateAdminCredentials(username, password);
+    if (!isValid) {
       sendError(res, 401, '用户名或密码错误');
       return;
     }

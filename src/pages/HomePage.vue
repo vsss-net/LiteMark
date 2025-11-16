@@ -26,7 +26,8 @@ const apiBase = apiBaseRaw.replace(/\/$/, '');
 const endpoint = `${apiBase}/api/bookmarks`;
 
 const DEFAULT_TITLE = '个人书签';
-const DEFAULT_ICON = '🔖';
+// 默认网站图标使用 public 目录下的 LiteMark.png
+const DEFAULT_ICON = '/LiteMark.png';
 const DEFAULT_CATEGORY_LABEL = '默认分类';
 const DEFAULT_CATEGORY_KEY = '';
 const DEFAULT_CATEGORY_ALIASES = new Set(
@@ -115,12 +116,29 @@ const containerRefs = new Map<string, HTMLElement>();
 const sortableInstances = new Map<string, Sortable>();
 const DEFAULT_CONTAINER_KEY = '__default__';
 
+// 折叠状态：记录哪些分类被折叠
+const collapsedGroupKeys = ref<Set<string>>(new Set());
+
 function encodeGroupKey(key: string): string {
   return key === '' ? DEFAULT_CONTAINER_KEY : key;
 }
 
 function decodeGroupKey(key: string): string {
   return key === DEFAULT_CONTAINER_KEY ? '' : key;
+}
+
+function toggleGroupCollapse(key: string) {
+  const next = new Set(collapsedGroupKeys.value);
+  if (next.has(key)) {
+    next.delete(key);
+  } else {
+    next.add(key);
+  }
+  collapsedGroupKeys.value = next;
+}
+
+function isGroupCollapsed(key: string): boolean {
+  return collapsedGroupKeys.value.has(key);
 }
 
 type SortableRefElement = Element | (ComponentPublicInstance & { $el?: Element });
@@ -301,13 +319,14 @@ function escapeXml(value: string) {
 function resolveFaviconHref(icon: string): string | null {
   const value = icon.trim();
   if (!value) {
-    return null;
+    // 默认使用 public 根目录下的图标
+    return '/LiteMark.png';
   }
+  // 已是完整 URL、data URL 或以 / 开头的路径，直接使用
   if (/^(https?:|data:|\/)/i.test(value)) {
     return value;
   }
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><text x="50%" y="58%" dominant-baseline="middle" text-anchor="middle" font-size="48">${escapeXml(value)}</text></svg>`;
-  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  return `/${value}`;
 }
 
 function updateFavicon(icon: string) {
@@ -492,12 +511,23 @@ async function loadBookmarks() {
   loading.value = true;
   error.value = null;
   try {
-    const response = await fetch(`${endpoint}?t=${Date.now()}`, {
-      cache: 'no-store',
-      headers: {
-        'Cache-Control': 'no-store'
-      }
-    });
+    const url = `${endpoint}?t=${Date.now()}`;
+    // 未登录用户：匿名请求，只拿可见书签
+    // 已登录用户：带上 token，请求会返回包含隐藏书签的完整列表
+    const response = isAuthenticated.value
+      ? await requestWithAuth(url, {
+          method: 'GET',
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-store'
+          }
+        })
+      : await fetch(url, {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-store'
+          }
+        });
     if (!response.ok) {
       if (response.status === 304) {
         return;
@@ -711,7 +741,8 @@ async function login() {
     loginState.username = '';
     loginState.password = '';
     await Promise.all([loadBookmarks(), loadSettings()]);
-    showHidden.value = false;
+    // 登录成功后默认显示隐藏书签
+    showHidden.value = true;
     showForm.value = false;
   } catch (err) {
     loginState.error = err instanceof Error ? err.message : '登录失败';
@@ -962,14 +993,29 @@ function openBookmark(bookmark: Bookmark) {
           :key="group.key"
           class="category-group"
         >
-          <header class="category-group__header">
+          <header class="category-group__header" @click="toggleGroupCollapse(group.key)">
             <div class="category-title">
-              <span class="category-title__icon">📚</span>
+              <span class="category-title__icon">
+                <img src="/LiteMark.png" alt="分类图标" />
+              </span>
               <span class="category-title__text">{{ group.name }}</span>
             </div>
-            <span class="category-badge">{{ group.count }}</span>
+            <div class="category-header-right">
+              <span class="category-badge">{{ group.count }}</span>
+              <button
+                class="category-toggle"
+                type="button"
+                @click.stop="toggleGroupCollapse(group.key)"
+                :aria-label="isGroupCollapsed(group.key) ? '展开分类' : '折叠分类'"
+              >
+                <span class="category-toggle__icon">
+                  {{ isGroupCollapsed(group.key) ? '▸' : '▾' }}
+                </span>
+              </button>
+            </div>
           </header>
           <div
+            v-show="!isGroupCollapsed(group.key)"
             class="card-grid"
             :ref="(el) => setContainerRef(group.key, el)"
             :data-group="encodeGroupKey(group.key)"
@@ -1021,7 +1067,9 @@ function openBookmark(bookmark: Bookmark) {
       <section v-else class="category-group">
         <header class="category-group__header">
           <div class="category-title">
-            <span class="category-title__icon">📚</span>
+            <span class="category-title__icon">
+              <img src="/LiteMark.png" alt="分类图标" />
+            </span>
             <span class="category-title__text">
               {{ categoryLabelFromKey(currentCategory) }}
             </span>
@@ -1098,7 +1146,7 @@ function openBookmark(bookmark: Bookmark) {
           </button>
         </form>
         <footer class="dialog__footer">
-          <p>默认账号：admin / admin123，可在后端环境变量中修改。</p>
+          <p>默认账号：admin / admin123，可在后台「站点设置 → 管理员账号」中修改。</p>
         </footer>
       </section>
     </div>
@@ -1774,6 +1822,12 @@ function openBookmark(bookmark: Bookmark) {
   align-items: center;
 }
 
+.category-header-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .category-title {
   display: flex;
   align-items: center;
@@ -1787,6 +1841,13 @@ function openBookmark(bookmark: Bookmark) {
   font-size: 22px;
 }
 
+.category-title__icon img {
+  width: 22px;
+  height: 22px;
+  display: block;
+  border-radius: 6px;
+}
+
 .category-badge {
   background: var(--badge-bg);
   color: var(--badge-text);
@@ -1794,6 +1855,21 @@ function openBookmark(bookmark: Bookmark) {
   border-radius: 999px;
   font-size: 13px;
   font-weight: 600;
+}
+
+.category-toggle {
+  border: none;
+  background: transparent;
+  padding: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.category-toggle__icon {
+  font-size: 14px;
 }
 
 .card-grid {

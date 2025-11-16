@@ -1,4 +1,5 @@
 import { sql } from '@vercel/postgres';
+import { createHash } from 'crypto';
 
 export interface BookmarkRecord {
   id: string;
@@ -15,6 +16,15 @@ export interface Settings {
   theme?: string;
   siteTitle?: string;
   siteIcon?: string;
+}
+
+export interface AdminCredentials {
+  username: string;
+  passwordHash: string;
+}
+
+function hashPassword(password: string): string {
+  return createHash('sha256').update(password).digest('hex');
 }
 
 // 初始化数据库表
@@ -53,6 +63,16 @@ async function initTables() {
       )
     `;
 
+    // 创建管理员账户表（目前仅支持单账户）
+    await sql`
+      CREATE TABLE IF NOT EXISTS admin_credentials (
+        id INTEGER PRIMARY KEY DEFAULT 1,
+        username VARCHAR(255) NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+
     // 创建索引
     await sql`
       CREATE INDEX IF NOT EXISTS idx_bookmarks_category ON bookmarks(category)
@@ -76,6 +96,64 @@ async function ensureTables() {
     await initTables();
     tablesInitialized = true;
   }
+}
+
+export async function getAdminCredentials(): Promise<AdminCredentials> {
+  await ensureTables();
+
+  const result = await sql`
+    SELECT username, password_hash
+    FROM admin_credentials
+    WHERE id = 1
+  `;
+
+  if (result.rows.length === 0) {
+    // 初始化默认管理员账号：admin / admin123
+    const defaultUsername = 'admin';
+    const defaultPassword = 'admin123';
+    const passwordHash = hashPassword(defaultPassword);
+
+    await sql`
+      INSERT INTO admin_credentials (id, username, password_hash, updated_at)
+      VALUES (1, ${defaultUsername}, ${passwordHash}, CURRENT_TIMESTAMP)
+      ON CONFLICT (id) DO NOTHING
+    `;
+
+    return {
+      username: defaultUsername,
+      passwordHash
+    };
+  }
+
+  const row = result.rows[0];
+  return {
+    username: row.username as string,
+    passwordHash: row.password_hash as string
+  };
+}
+
+export async function updateAdminCredentials(
+  username: string,
+  password: string
+): Promise<AdminCredentials> {
+  await ensureTables();
+  const trimmedUsername = username.trim();
+  const passwordHash = hashPassword(password);
+
+  await sql`
+    INSERT INTO admin_credentials (id, username, password_hash, updated_at)
+    VALUES (1, ${trimmedUsername}, ${passwordHash}, CURRENT_TIMESTAMP)
+    ON CONFLICT (id)
+    DO UPDATE SET
+      username = ${trimmedUsername},
+      password_hash = ${passwordHash},
+      updated_at = CURRENT_TIMESTAMP
+  `;
+
+  return {
+    username: trimmedUsername,
+    passwordHash
+  };
 }
 
 function normalizeCategory(category?: string | null): string {
@@ -341,7 +419,8 @@ export async function getSettings(): Promise<Settings> {
   const settings: Settings = {
     theme: 'light',
     siteTitle: '个人书签',
-    siteIcon: '🔖'
+    // 默认使用 public 目录下的 LiteMark 图标
+    siteIcon: '/LiteMark.png'
   };
   
   result.rows.forEach(row => {

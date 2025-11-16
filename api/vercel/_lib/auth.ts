@@ -1,15 +1,25 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import jwt from 'jsonwebtoken';
 import { sendError } from './http.js';
+import { getAdminCredentials } from './db.js';
+import { createHash } from 'crypto';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const JWT_EXPIRES_IN = '7d';
 
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
+function hashPassword(password: string): string {
+  return createHash('sha256').update(password).digest('hex');
+}
 
-export function validateAdminCredentials(username: string, password: string): boolean {
-  return username === ADMIN_USERNAME && password === ADMIN_PASSWORD;
+// 校验管理员账号密码（从数据库读取，不再依赖环境变量）
+export async function validateAdminCredentials(
+  username: string,
+  password: string
+): Promise<boolean> {
+  const creds = await getAdminCredentials();
+  if (!creds.username) return false;
+  const hash = hashPassword(password);
+  return username === creds.username && hash === creds.passwordHash;
 }
 
 export function issueToken(username: string): string {
@@ -40,5 +50,15 @@ export function requireAuth(req: VercelRequest, res: VercelResponse): { username
   }
 
   return decoded;
+}
+
+// 非强制认证：如果有合法 token 就返回用户信息，否则返回 null，不报错
+export function getAuthFromRequest(req: VercelRequest): { username: string } | null {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+  const token = authHeader.substring(7);
+  return verifyToken(token);
 }
 

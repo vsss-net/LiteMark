@@ -8,7 +8,7 @@ import {
   sendJson
 } from '../_lib/http.js';
 import { createBookmark, listBookmarks } from '../_lib/db.js';
-import { requireAuth } from '../_lib/auth.js';
+import { getAuthFromRequest, requireAuth } from '../_lib/auth.js';
 
 type BookmarkBody = {
   title?: string;
@@ -37,9 +37,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'GET') {
     try {
       console.log('获取书签');
-      const bookmarks = await listBookmarks();
-      console.log('书签', bookmarks);
-      sendJson(res, 200, bookmarks);
+      const auth = getAuthFromRequest(req);
+      const allBookmarks = await listBookmarks();
+      // 未登录用户看不到隐藏书签；已登录用户可看到全部
+      const visibleBookmarks = auth
+        ? allBookmarks
+        : allBookmarks.filter((item) => item.visible !== false);
+      console.log('书签', visibleBookmarks);
+      sendJson(res, 200, visibleBookmarks);
     } catch (error) {
       console.error('获取书签失败', error);
       sendError(res, 500, '获取书签失败');

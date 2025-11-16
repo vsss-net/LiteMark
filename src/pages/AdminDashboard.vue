@@ -29,7 +29,8 @@ const apiBase = apiBaseRaw.replace(/\/$/, '');
 const bookmarksEndpoint = `${apiBase}/api/bookmarks`;
 
 const DEFAULT_TITLE = '个人书签';
-const DEFAULT_ICON = '🔖';
+// 默认网站图标使用 public 目录下的 LiteMark.png
+const DEFAULT_ICON = '/LiteMark.png';
 
 const themeOptions = [
   { value: 'light', label: '晨光浅色' },
@@ -59,6 +60,16 @@ const siteSettingsForm = reactive({
 const siteSettingsSaving = ref(false);
 const siteSettingsMessage = ref('');
 const siteSettingsError = ref('');
+
+// 管理员账号设置
+const adminSettingsForm = reactive({
+  username: 'admin',
+  password: '',
+  confirmPassword: ''
+});
+const adminSettingsSaving = ref(false);
+const adminSettingsMessage = ref('');
+const adminSettingsError = ref('');
 
 const showEditor = ref(false);
 const editorMode = ref<'create' | 'edit'>('create');
@@ -195,13 +206,15 @@ function escapeXml(value: string) {
 function resolveFaviconHref(icon: string): string | null {
   const value = icon.trim();
   if (!value) {
-    return null;
+    // 默认使用 public 根目录下的图标
+    return '/LiteMark.png';
   }
+  // 已是完整 URL、data URL 或以 / 开头的路径，直接使用
   if (/^(https?:|data:|\/)/i.test(value)) {
     return value;
   }
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><text x="50%" y="58%" dominant-baseline="middle" text-anchor="middle" font-size="48">${escapeXml(value)}</text></svg>`;
-  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  // 其余情况视为 public 根目录下的文件名，例如 LiteMark128.png
+  return `/${value}`;
 }
 
 function updateFavicon(icon: string) {
@@ -301,7 +314,7 @@ async function loadBookmarks() {
   loading.value = true;
   error.value = null;
   try {
-    const response = await fetch(bookmarksEndpoint);
+    const response = await requestWithAuth(bookmarksEndpoint, { method: 'GET' });
     if (!response.ok) {
       throw new Error(`加载失败：${response.status}`);
     }
@@ -342,6 +355,26 @@ async function loadSettings() {
     const message = err instanceof Error ? err.message : '加载站点设置失败';
     siteSettingsError.value = message;
     themeMessage.value = message;
+  }
+}
+
+async function loadAdminSettings() {
+  try {
+    const response = await requestWithAuth(`${apiBase}/api/admin/credentials`, {
+      method: 'GET'
+    });
+    if (!response.ok) {
+      const message = await response.text();
+      throw new Error(message || '获取管理员账号失败');
+    }
+    const data = (await response.json()) as { username: string };
+    adminSettingsForm.username = data.username || 'admin';
+    adminSettingsForm.password = '';
+    adminSettingsForm.confirmPassword = '';
+    adminSettingsMessage.value = '';
+    adminSettingsError.value = '';
+  } catch (err) {
+    adminSettingsError.value = err instanceof Error ? err.message : '获取管理员账号失败';
   }
 }
 
@@ -529,6 +562,57 @@ async function saveSiteSettings() {
   }
 }
 
+async function saveAdminSettings() {
+  if (!isAuthenticated.value) {
+    showLoginModal.value = true;
+    return;
+  }
+  const username = adminSettingsForm.username.trim();
+  const password = adminSettingsForm.password;
+  const confirm = adminSettingsForm.confirmPassword;
+
+  if (!username) {
+    adminSettingsError.value = '管理员用户名不能为空';
+    return;
+  }
+  if (!password) {
+    adminSettingsError.value = '管理员密码不能为空';
+    return;
+  }
+  if (password.length < 6) {
+    adminSettingsError.value = '管理员密码长度至少为 6 位';
+    return;
+  }
+  if (password !== confirm) {
+    adminSettingsError.value = '两次输入的密码不一致';
+    return;
+  }
+
+  adminSettingsSaving.value = true;
+  adminSettingsMessage.value = '';
+  adminSettingsError.value = '';
+
+  try {
+    const response = await requestWithAuth(`${apiBase}/api/admin/credentials`, {
+      method: 'PUT',
+      body: JSON.stringify({ username, password })
+    });
+    if (!response.ok) {
+      const message = await response.text();
+      throw new Error(message || '保存管理员账号失败');
+    }
+    const data = (await response.json()) as { username: string };
+    adminSettingsForm.username = data.username || username;
+    adminSettingsForm.password = '';
+    adminSettingsForm.confirmPassword = '';
+    adminSettingsMessage.value = '管理员账号已保存';
+  } catch (err) {
+    adminSettingsError.value = err instanceof Error ? err.message : '保存管理员账号失败';
+  } finally {
+    adminSettingsSaving.value = false;
+  }
+}
+
 async function login() {
   loginState.loading = true;
   loginState.error = '';
@@ -553,7 +637,7 @@ async function login() {
     showLoginModal.value = false;
     loginState.username = '';
     loginState.password = '';
-    await Promise.all([loadBookmarks(), loadSettings()]);
+    await Promise.all([loadBookmarks(), loadSettings(), loadAdminSettings()]);
   } catch (err) {
     loginState.error = err instanceof Error ? err.message : '登录失败';
   } finally {
@@ -961,7 +1045,7 @@ onMounted(() => {
     showLoginModal.value = true;
     return;
   }
-  Promise.all([loadBookmarks(), loadSettings()]).catch((err) => {
+  Promise.all([loadBookmarks(), loadSettings(), loadAdminSettings()]).catch((err) => {
     console.error(err);
   });
 });
@@ -1136,56 +1220,116 @@ onMounted(() => {
             <h2>站点设置</h2>
             <p>配置网站标题、图标以及主题风格</p>
           </header>
-          <form class="form-grid" @submit.prevent="saveSiteSettings">
-            <label class="field">
-              <span>网站标题 *</span>
-              <input
-                v-model="siteSettingsForm.title"
-                type="text"
-                maxlength="60"
-                placeholder="例如：我的书签收藏"
-                required
-                :disabled="!isAuthenticated || siteSettingsSaving"
-              />
-            </label>
-            <label class="field">
-              <span>网站图标</span>
-              <input
-                v-model="siteSettingsForm.icon"
-                type="text"
-                maxlength="512"
-                placeholder="Emoji、链接或 data URL"
-                :disabled="!isAuthenticated || siteSettingsSaving"
-              />
-            </label>
-            <label class="field">
-              <span>主题</span>
-              <select
-                v-model="selectedTheme"
-                @change="handleThemeChange"
-                :disabled="themeSaving || !isAuthenticated"
-              >
-                <option v-for="option in themeOptions" :key="option.value" :value="option.value">
-                  {{ option.label }}
-                </option>
-              </select>
-            </label>
-            <div class="settings-actions">
-              <button class="button button--primary" type="submit" :disabled="siteSettingsSaving || !isAuthenticated">
-                {{ siteSettingsSaving ? '保存中...' : '保存设置' }}
-              </button>
-            </div>
-          </form>
-          <p v-if="siteSettingsError" class="alert alert--error">{{ siteSettingsError }}</p>
-          <p v-else-if="siteSettingsMessage" class="alert alert--success">{{ siteSettingsMessage }}</p>
-          <p
-            v-if="orderMessage"
-            class="alert"
-            :class="orderMessage.includes('失败') ? 'alert--error' : 'alert--success'"
-          >
-            {{ orderMessage }}
-          </p>
-          <p v-if="themeMessage" class="alert alert--error">{{ themeMessage }}</p>
+          <div class="settings-sections">
+            <form class="form-grid" @submit.prevent="saveSiteSettings">
+              <label class="field">
+                <span>网站标题 *</span>
+                <input
+                  v-model="siteSettingsForm.title"
+                  type="text"
+                  maxlength="60"
+                  placeholder="例如：我的书签收藏"
+                  required
+                  :disabled="!isAuthenticated || siteSettingsSaving"
+                />
+              </label>
+              <label class="field">
+                <span>网站图标</span>
+                <input
+                  v-model="siteSettingsForm.icon"
+                  type="text"
+                  maxlength="512"
+                  placeholder="例如：LiteMark.png 或 /LiteMark128.png"
+                  :disabled="!isAuthenticated || siteSettingsSaving"
+                />
+              </label>
+              <label class="field">
+                <span>主题</span>
+                <select
+                  v-model="selectedTheme"
+                  @change="handleThemeChange"
+                  :disabled="themeSaving || !isAuthenticated"
+                >
+                  <option v-for="option in themeOptions" :key="option.value" :value="option.value">
+                    {{ option.label }}
+                  </option>
+                </select>
+              </label>
+              <div class="settings-actions">
+                <button
+                  class="button button--primary"
+                  type="submit"
+                  :disabled="siteSettingsSaving || !isAuthenticated"
+                >
+                  {{ siteSettingsSaving ? '保存中...' : '保存设置' }}
+                </button>
+              </div>
+            </form>
+            <p v-if="siteSettingsError" class="alert alert--error">{{ siteSettingsError }}</p>
+            <p v-else-if="siteSettingsMessage" class="alert alert--success">{{ siteSettingsMessage }}</p>
+            <p
+              v-if="orderMessage"
+              class="alert"
+              :class="orderMessage.includes('失败') ? 'alert--error' : 'alert--success'"
+            >
+              {{ orderMessage }}
+            </p>
+            <p v-if="themeMessage" class="alert alert--error">{{ themeMessage }}</p>
+
+            <hr class="settings-divider" />
+
+            <section class="admin-settings">
+              <h3>管理员账号</h3>
+              <p class="settings-help">在这里修改后台登录的用户名和密码。</p>
+              <form class="form-grid admin-settings__form" @submit.prevent="saveAdminSettings">
+                <label class="field">
+                  <span>管理员用户名</span>
+                  <input
+                    v-model="adminSettingsForm.username"
+                    type="text"
+                    maxlength="60"
+                    placeholder="例如：admin"
+                    :disabled="!isAuthenticated || adminSettingsSaving"
+                  />
+                </label>
+                <label class="field">
+                  <span>新密码</span>
+                  <input
+                    v-model="adminSettingsForm.password"
+                    type="password"
+                    minlength="6"
+                    autocomplete="new-password"
+                    placeholder="至少 6 位"
+                    :disabled="!isAuthenticated || adminSettingsSaving"
+                  />
+                </label>
+                <label class="field">
+                  <span>确认新密码</span>
+                  <input
+                    v-model="adminSettingsForm.confirmPassword"
+                    type="password"
+                    minlength="6"
+                    autocomplete="new-password"
+                    placeholder="再次输入新密码"
+                    :disabled="!isAuthenticated || adminSettingsSaving"
+                  />
+                </label>
+                <div class="settings-actions">
+                  <button
+                    class="button button--primary"
+                    type="submit"
+                    :disabled="adminSettingsSaving || !isAuthenticated"
+                  >
+                    {{ adminSettingsSaving ? '保存中...' : '保存管理员账号' }}
+                  </button>
+                </div>
+              </form>
+              <p v-if="adminSettingsError" class="alert alert--error">{{ adminSettingsError }}</p>
+              <p v-else-if="adminSettingsMessage" class="alert alert--success">
+                {{ adminSettingsMessage }}
+              </p>
+            </section>
+          </div>
         </section>
 
         <section class="card bookmarks-card">
@@ -1364,7 +1508,7 @@ onMounted(() => {
           </button>
         </form>
         <footer class="dialog__footer">
-          <p>默认账号：admin / admin123，可在后端环境变量中修改。</p>
+          <p>默认账号：admin / admin123，可在下方「管理员账号」区域修改。</p>
         </footer>
       </section>
     </div>
@@ -1569,6 +1713,39 @@ onMounted(() => {
   display: grid;
   gap: 16px;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.settings-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.settings-divider {
+  border: none;
+  border-top: 1px solid var(--surface-border);
+  margin: 4px 0 12px;
+}
+
+.admin-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.admin-settings h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.settings-help {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.admin-settings__form {
+  margin-top: 4px;
 }
 
 .field {
