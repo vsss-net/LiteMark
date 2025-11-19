@@ -199,14 +199,8 @@
               系统将在 Cron Job 触发时自动备份数据到 WebDAV。每次备份会创建新文件（格式：<code>litemark-backup-YYYY-MM-DD.json</code>），并自动清理超出保留数量的旧备份。
             </p>
             <p style="margin: 8px 0 0 0; font-size: 13px;">
-              请确保在 <code>vercel.json</code> 中已配置 Cron Job：
+              将使用 <code>vercel.json</code> 中配置的 Cron Job 自动备份数据到 WebDAV。  默认每天凌晨2点备份。
             </p>
-            <pre style="margin: 8px 0 0 0; padding: 8px; background: #f5f5f5; border-radius: 4px; font-size: 12px; overflow-x: auto;">{
-  "crons": [{
-    "path": "/api/cron/backup",
-    "schedule": "0 2 * * *"
-  }]
-}</pre>
           </div>
         </template>
       </el-alert>

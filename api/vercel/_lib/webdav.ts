@@ -12,6 +12,109 @@ export interface WebDAVConfig {
 }
 
 /**
+ * 确保 WebDAV 目录存在
+ */
+async function ensureDirectoryExists(
+  baseUrl: string,
+  auth: string,
+  dirPath: string
+): Promise<void> {
+  // 如果路径是文件路径，提取目录部分
+  const directory = dirPath.includes('/') 
+    ? dirPath.substring(0, dirPath.lastIndexOf('/'))
+    : dirPath;
+  
+  if (!directory || directory === '/') {
+    return; // 根目录，不需要创建
+  }
+  
+  const dirUrl = `${baseUrl}${directory.startsWith('/') ? directory : '/' + directory}`;
+  
+  try {
+    // 尝试创建目录（如果不存在）
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
+    
+    const response = await fetch(dirUrl, {
+      method: 'MKCOL',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'User-Agent': 'LiteMark/1.0'
+      },
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    
+    // 201 (Created) 表示成功创建，405 (Method Not Allowed) 表示已存在，都是正常的
+    if (response.status !== 201 && response.status !== 405 && response.status !== 409) {
+      // 409 (Conflict) 也可能表示已存在，但有些服务器会返回这个
+      if (response.status !== 207) {
+        // 207 (Multi-Status) 也可能表示部分成功
+        console.warn(`创建目录可能失败 (${response.status}): ${dirUrl}`);
+      }
+    }
+  } catch (error) {
+    // 忽略目录创建错误，继续尝试上传
+    console.warn('创建目录时出错（可能已存在）:', error);
+  }
+}
+
+/**
+ * 上传文件到 WebDAV（带重试机制）
+ */
+async function uploadWithRetry(
+  fullUrl: string,
+  auth: string,
+  content: string,
+  maxRetries: number = 3
+): Promise<Response> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
+      
+      const response = await fetch(fullUrl, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Basic ${auth}`,
+          'Content-Type': 'application/json',
+          'Content-Length': content.length.toString(),
+          'User-Agent': 'LiteMark/1.0'
+        },
+        body: content,
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      return response;
+    } catch (error: any) {
+      lastError = error;
+      
+      // 如果是连接错误且还有重试机会，等待后重试
+      if (attempt < maxRetries && (
+        error.code === 'UND_ERR_SOCKET' ||
+        error.message?.includes('fetch failed') ||
+        error.message?.includes('other side closed')
+      )) {
+        const waitTime = attempt * 1000; // 递增等待时间：1s, 2s, 3s
+        console.warn(`上传失败，${waitTime}ms 后重试 (${attempt}/${maxRetries}):`, error.message);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        continue;
+      }
+      
+      // 如果不是连接错误或没有重试机会了，直接抛出
+      throw error;
+    }
+  }
+  
+  // 所有重试都失败了
+  throw lastError || new Error('上传失败：未知错误');
+}
+
+/**
  * 上传文件到 WebDAV
  */
 export async function uploadToWebDAV(
@@ -29,15 +132,11 @@ export async function uploadToWebDAV(
   // 创建 Basic Auth header
   const auth = Buffer.from(`${username}:${password}`).toString('base64');
   
-  const response = await fetch(fullUrl, {
-    method: 'PUT',
-    headers: {
-      'Authorization': `Basic ${auth}`,
-      'Content-Type': 'application/json',
-      'Content-Length': content.length.toString()
-    },
-    body: content
-  });
+  // 确保目录存在
+  await ensureDirectoryExists(baseUrl, auth, filePath);
+  
+  // 使用重试机制上传
+  const response = await uploadWithRetry(fullUrl, auth, content);
   
   if (!response.ok) {
     const errorText = await response.text().catch(() => 'Unknown error');
@@ -56,18 +155,30 @@ export async function testWebDAVConnection(config: WebDAVConfig): Promise<boolea
     // 尝试执行 PROPFIND 请求来测试连接
     const auth = Buffer.from(`${username}:${password}`).toString('base64');
     
-    const response = await fetch(baseUrl, {
-      method: 'PROPFIND',
-      headers: {
-        'Authorization': `Basic ${auth}`,
-        'Depth': '0'
-      }
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
     
-    // 200, 207 (Multi-Status) 或 404 都表示连接成功
-    return response.status === 200 || response.status === 207 || response.status === 404;
-  } catch (error) {
-    console.error('WebDAV 连接测试失败:', error);
+    try {
+      const response = await fetch(baseUrl, {
+        method: 'PROPFIND',
+        headers: {
+          'Authorization': `Basic ${auth}`,
+          'Depth': '0',
+          'User-Agent': 'LiteMark/1.0'
+        },
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      // 200, 207 (Multi-Status) 或 404 都表示连接成功
+      return response.status === 200 || response.status === 207 || response.status === 404;
+    } catch (fetchError: any) {
+      clearTimeout(timeoutId);
+      throw fetchError;
+    }
+  } catch (error: any) {
+    console.error('WebDAV 连接测试失败:', error.message || error);
     return false;
   }
 }
@@ -86,13 +197,20 @@ export async function listBackupFiles(config: WebDAVConfig): Promise<Array<{ nam
   const auth = Buffer.from(`${username}:${password}`).toString('base64');
   
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15秒超时
+    
     const response = await fetch(fullUrl, {
       method: 'PROPFIND',
       headers: {
         'Authorization': `Basic ${auth}`,
-        'Depth': '1'
-      }
+        'Depth': '1',
+        'User-Agent': 'LiteMark/1.0'
+      },
+      signal: controller.signal
     });
+    
+    clearTimeout(timeoutId);
     
     if (!response.ok) {
       return [];
@@ -146,12 +264,19 @@ export async function deleteWebDAVFile(config: WebDAVConfig, filePath: string): 
   
   const auth = Buffer.from(`${username}:${password}`).toString('base64');
   
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15秒超时
+  
   const response = await fetch(fullUrl, {
     method: 'DELETE',
     headers: {
-      'Authorization': `Basic ${auth}`
-    }
+      'Authorization': `Basic ${auth}`,
+      'User-Agent': 'LiteMark/1.0'
+    },
+    signal: controller.signal
   });
+  
+  clearTimeout(timeoutId);
   
   // 204 (No Content) 或 404 (Not Found) 都表示成功
   if (response.status !== 204 && response.status !== 404) {
