@@ -159,5 +159,19 @@ onMounted(() => {
   font-weight: 700;
   color: #1a73e8;
 }
+
+@media (max-width: 768px) {
+  .stats-row {
+    margin-bottom: 16px;
+  }
+
+  .stat-value {
+    font-size: 28px;
+  }
+
+  .stat-label {
+    font-size: 13px;
+  }
+}
 </style>
 

@@ -7,8 +7,11 @@
       <template #header>
         <h3>站点设置</h3>
       </template>
-      <el-form :model="siteSettingsForm" label-width="120px" @submit.prevent="saveSiteSettings">
-        <el-form-item label="网站标题" required>
+      <el-form :model="siteSettingsForm" :label-width="isMobile ? '0px' : '120px'" @submit.prevent="saveSiteSettings">
+        <el-form-item :label="isMobile ? '' : '网站标题'" required>
+          <template v-if="isMobile" #label>
+            <span class="mobile-label">网站标题 <span class="required-mark">*</span></span>
+          </template>
           <el-input
             v-model="siteSettingsForm.title"
             maxlength="60"
@@ -16,7 +19,10 @@
             :disabled="!isAuthenticated || siteSettingsSaving"
           />
         </el-form-item>
-        <el-form-item label="网站图标">
+        <el-form-item :label="isMobile ? '' : '网站图标'">
+          <template v-if="isMobile" #label>
+            <span class="mobile-label">网站图标</span>
+          </template>
           <el-input
             v-model="siteSettingsForm.icon"
             maxlength="512"
@@ -24,7 +30,10 @@
             :disabled="!isAuthenticated || siteSettingsSaving"
           />
         </el-form-item>
-        <el-form-item label="主题">
+        <el-form-item :label="isMobile ? '' : '主题'">
+          <template v-if="isMobile" #label>
+            <span class="mobile-label">主题</span>
+          </template>
           <el-select
             v-model="selectedTheme"
             @change="handleThemeChange"
@@ -39,12 +48,13 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item>
+        <el-form-item class="form-submit-item">
           <el-button
             type="primary"
             :loading="siteSettingsSaving"
             :disabled="!isAuthenticated"
             @click="saveSiteSettings"
+            class="submit-button"
           >
             保存设置
           </el-button>
@@ -79,7 +89,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch } from 'vue';
+import { onMounted, reactive, ref, watch, onUnmounted } from 'vue';
 import { ElMessage } from 'element-plus';
 
 const DEFAULT_TITLE = '个人书签';
@@ -118,6 +128,12 @@ const siteSettingsError = ref('');
 const storedToken = typeof window !== 'undefined' ? window.localStorage.getItem('bookmark_token') : null;
 const authToken = ref<string | null>(storedToken);
 const isAuthenticated = ref(Boolean(storedToken));
+
+// 移动端检测
+const isMobile = ref(false);
+function checkMobile() {
+  isMobile.value = window.innerWidth <= 768;
+}
 
 function applyTheme(theme: string) {
   if (typeof document === 'undefined') return;
@@ -311,6 +327,12 @@ async function saveSiteSettings() {
 
 onMounted(() => {
   loadSettings();
+  checkMobile();
+  window.addEventListener('resize', checkMobile);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('resize', checkMobile);
 });
 </script>
 
@@ -341,6 +363,98 @@ onMounted(() => {
   font-size: 18px;
   font-weight: 600;
   color: #1f2933;
+}
+
+.mobile-label {
+  display: block;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.required-mark {
+  color: #f56565;
+  margin-left: 2px;
+}
+
+@media (max-width: 768px) {
+  .settings-page {
+    padding: 0;
+  }
+
+  .page-title {
+    font-size: 20px;
+    margin-bottom: 8px;
+  }
+
+  .page-desc {
+    font-size: 13px;
+    margin-bottom: 16px;
+  }
+
+  .settings-card {
+    margin-bottom: 16px;
+    border-radius: 8px;
+  }
+
+  .settings-card :deep(.el-card__header) {
+    padding: 16px;
+  }
+
+  .settings-card :deep(.el-card__body) {
+    padding: 16px;
+  }
+
+  .settings-card h3 {
+    font-size: 16px;
+  }
+
+  .settings-card :deep(.el-form-item) {
+    margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .settings-card :deep(.el-form-item__label) {
+    width: 100% !important;
+    text-align: left !important;
+    margin-bottom: 8px !important;
+    padding: 0 !important;
+    margin-right: 0 !important;
+    line-height: 1.5;
+    font-weight: 500;
+    color: #374151;
+    float: none !important;
+  }
+
+  .settings-card :deep(.el-form-item__content) {
+    margin-left: 0 !important;
+    width: 100% !important;
+    flex: 1;
+  }
+
+  .settings-card :deep(.el-input),
+  .settings-card :deep(.el-select),
+  .settings-card :deep(.el-input__wrapper) {
+    width: 100% !important;
+  }
+
+  .form-submit-item {
+    margin-top: 24px;
+  }
+
+  .form-submit-item :deep(.el-form-item__content) {
+    margin-left: 0 !important;
+  }
+
+  .submit-button {
+    width: 100%;
+  }
+
+  .settings-card :deep(.el-alert) {
+    margin-top: 12px;
+  }
 }
 </style>
 

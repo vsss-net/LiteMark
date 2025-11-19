@@ -4,6 +4,9 @@
     <el-header class="header-bar">
       <div class="header-content">
         <div class="logo">
+          <el-icon class="mobile-menu-btn" @click="toggleMobileMenu">
+            <Menu />
+          </el-icon>
           <img src="/LiteMark.png" alt="Logo" />
           <span class="logo-text">LiteMark 后台管理</span>
         </div>
@@ -31,7 +34,7 @@
     <!-- 主内容区 -->
     <el-container class="main-container">
       <!-- 侧边导航 -->
-      <el-aside class="aside-nav" :width="isCollapse ? '64px' : '240px'">
+      <el-aside class="aside-nav" :class="{ 'mobile-hidden': !showMobileMenu }" :width="isCollapse ? '64px' : '240px'">
         <div class="nav-header">
           <div class="nav-title">
             <span v-show="!isCollapse">功能导航</span>
@@ -46,6 +49,7 @@
           class="nav-menu"
           router
           :collapse="isCollapse"
+          @select="closeMobileMenu"
         >
           <el-menu-item v-for="item in navItems" :key="item.path" :index="item.path">
             <el-icon><component :is="item.icon" /></el-icon>
@@ -53,6 +57,8 @@
           </el-menu-item>
         </el-menu>
       </el-aside>
+      <!-- 移动端遮罩层 -->
+      <div v-if="showMobileMenu" class="mobile-overlay" @click="closeMobileMenu"></div>
       <!-- 内容区域 -->
       <el-main class="main-content">
         <div class="content-wrapper">
@@ -74,7 +80,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import {
@@ -88,12 +94,14 @@ import {
   Collection,
   Document,
   Upload,
-  UserFilled
+  UserFilled,
+  Menu
 } from '@element-plus/icons-vue';
 
 const route = useRoute();
 const router = useRouter();
 const isCollapse = ref(false);
+const showMobileMenu = ref(false);
 
 // 用户名
 const storedUser = typeof window !== 'undefined' ? window.localStorage.getItem('bookmark_username') : null;
@@ -124,6 +132,21 @@ const activeRoute = computed(() => route.path);
 const toggleCollapse = () => {
   isCollapse.value = !isCollapse.value;
 };
+
+// 切换移动端菜单
+const toggleMobileMenu = () => {
+  showMobileMenu.value = !showMobileMenu.value;
+};
+
+// 关闭移动端菜单
+const closeMobileMenu = () => {
+  showMobileMenu.value = false;
+};
+
+// 监听路由变化，关闭移动端菜单
+watch(() => route.path, () => {
+  closeMobileMenu();
+});
 
 // 处理下拉菜单命令
 const handleCommand = (command: string) => {
@@ -326,10 +349,41 @@ html, body, #app {
   transform: translateY(10px);
 }
 
+/* 移动端菜单按钮 */
+.mobile-menu-btn {
+  display: none;
+  font-size: 20px;
+  cursor: pointer;
+  margin-right: 12px;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background 0.3s;
+}
+
+.mobile-menu-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* 移动端遮罩层 */
+.mobile-overlay {
+  display: none;
+  position: fixed;
+  top: 60px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+}
+
 /* 响应式设计 */
 @media (max-width: 768px) {
   .header-bar {
     padding: 0 15px;
+  }
+  
+  .mobile-menu-btn {
+    display: block;
   }
   
   .logo-text {
@@ -340,12 +394,43 @@ html, body, #app {
     display: none;
   }
   
+  .aside-nav {
+    position: fixed;
+    top: 60px;
+    left: 0;
+    height: calc(100vh - 60px);
+    z-index: 1000;
+    transform: translateX(0);
+    transition: transform 0.3s;
+  }
+  
+  .aside-nav.mobile-hidden {
+    transform: translateX(-100%);
+  }
+  
+  .main-container {
+    margin-left: 0;
+  }
+  
   .main-content {
     padding: 15px;
+    margin-left: 0;
   }
   
   .content-wrapper {
-    padding: 20px;
+    padding: 16px;
+  }
+  
+  .mobile-overlay {
+    display: block;
+  }
+  
+  .nav-menu {
+    border-right: none;
+  }
+  
+  .nav-menu :deep(.el-menu-item) {
+    margin-right: 0;
   }
 }
 

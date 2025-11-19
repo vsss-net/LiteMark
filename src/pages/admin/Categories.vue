@@ -305,5 +305,27 @@ onMounted(() => {
   gap: 12px;
   justify-content: flex-end;
 }
+
+@media (max-width: 768px) {
+  .category-item {
+    grid-template-columns: 40px 1fr;
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .category-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    margin-top: 8px;
+  }
+
+  .category-actions-footer {
+    flex-direction: column;
+  }
+
+  .category-actions-footer .el-button {
+    width: 100%;
+  }
+}
 </style>
 

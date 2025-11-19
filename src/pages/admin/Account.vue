@@ -7,8 +7,11 @@
       <template #header>
         <h3>管理员账号</h3>
       </template>
-      <el-form :model="adminSettingsForm" label-width="140px" @submit.prevent="saveAdminSettings">
-        <el-form-item label="管理员用户名" required>
+      <el-form :model="adminSettingsForm" :label-width="isMobile ? '0px' : '140px'" @submit.prevent="saveAdminSettings">
+        <el-form-item :label="isMobile ? '' : '管理员用户名'" required>
+          <template v-if="isMobile" #label>
+            <span class="mobile-label">管理员用户名 <span class="required-mark">*</span></span>
+          </template>
           <el-input
             v-model="adminSettingsForm.username"
             maxlength="60"
@@ -16,7 +19,10 @@
             :disabled="!isAuthenticated || adminSettingsSaving"
           />
         </el-form-item>
-        <el-form-item label="新密码" required>
+        <el-form-item :label="isMobile ? '' : '新密码'" required>
+          <template v-if="isMobile" #label>
+            <span class="mobile-label">新密码 <span class="required-mark">*</span></span>
+          </template>
           <el-input
             v-model="adminSettingsForm.password"
             type="password"
@@ -27,7 +33,10 @@
             show-password
           />
         </el-form-item>
-        <el-form-item label="确认新密码" required>
+        <el-form-item :label="isMobile ? '' : '确认新密码'" required>
+          <template v-if="isMobile" #label>
+            <span class="mobile-label">确认新密码 <span class="required-mark">*</span></span>
+          </template>
           <el-input
             v-model="adminSettingsForm.confirmPassword"
             type="password"
@@ -38,12 +47,13 @@
             show-password
           />
         </el-form-item>
-        <el-form-item>
+        <el-form-item class="form-submit-item">
           <el-button
             type="primary"
             :loading="adminSettingsSaving"
             :disabled="!isAuthenticated"
             @click="saveAdminSettings"
+            class="submit-button"
           >
             保存管理员账号
           </el-button>
@@ -70,7 +80,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { onMounted, reactive, ref, onUnmounted } from 'vue';
 import { ElMessage } from 'element-plus';
 
 const apiBaseRaw =
@@ -92,6 +102,12 @@ const adminSettingsError = ref('');
 const storedToken = typeof window !== 'undefined' ? window.localStorage.getItem('bookmark_token') : null;
 const authToken = ref<string | null>(storedToken);
 const isAuthenticated = ref(Boolean(storedToken));
+
+// 移动端检测
+const isMobile = ref(false);
+function checkMobile() {
+  isMobile.value = window.innerWidth <= 768;
+}
 
 async function requestWithAuth(input: RequestInfo | URL, init: RequestInit = {}) {
   if (!authToken.value) {
@@ -190,6 +206,12 @@ onMounted(() => {
   if (isAuthenticated.value) {
     loadAdminSettings();
   }
+  checkMobile();
+  window.addEventListener('resize', checkMobile);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('resize', checkMobile);
 });
 </script>
 
@@ -220,6 +242,97 @@ onMounted(() => {
   font-size: 18px;
   font-weight: 600;
   color: #1f2933;
+}
+
+.mobile-label {
+  display: block;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.required-mark {
+  color: #f56565;
+  margin-left: 2px;
+}
+
+@media (max-width: 768px) {
+  .account-page {
+    padding: 0;
+  }
+
+  .page-title {
+    font-size: 20px;
+    margin-bottom: 8px;
+  }
+
+  .page-desc {
+    font-size: 13px;
+    margin-bottom: 16px;
+  }
+
+  .account-card {
+    margin-bottom: 16px;
+    border-radius: 8px;
+  }
+
+  .account-card :deep(.el-card__header) {
+    padding: 16px;
+  }
+
+  .account-card :deep(.el-card__body) {
+    padding: 16px;
+  }
+
+  .account-card h3 {
+    font-size: 16px;
+  }
+
+  .account-card :deep(.el-form-item) {
+    margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .account-card :deep(.el-form-item__label) {
+    width: 100% !important;
+    text-align: left !important;
+    margin-bottom: 8px !important;
+    padding: 0 !important;
+    margin-right: 0 !important;
+    line-height: 1.5;
+    font-weight: 500;
+    color: #374151;
+    float: none !important;
+  }
+
+  .account-card :deep(.el-form-item__content) {
+    margin-left: 0 !important;
+    width: 100% !important;
+    flex: 1;
+  }
+
+  .account-card :deep(.el-input),
+  .account-card :deep(.el-input__wrapper) {
+    width: 100% !important;
+  }
+
+  .form-submit-item {
+    margin-top: 24px;
+  }
+
+  .form-submit-item :deep(.el-form-item__content) {
+    margin-left: 0 !important;
+  }
+
+  .submit-button {
+    width: 100%;
+  }
+
+  .account-card :deep(.el-alert) {
+    margin-top: 12px;
+  }
 }
 </style>
 

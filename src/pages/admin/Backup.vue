@@ -351,5 +351,15 @@ function triggerBackupImportFile() {
 .backup-import-options {
   margin-bottom: 16px;
 }
+
+@media (max-width: 768px) {
+  .backup-card {
+    margin-bottom: 16px;
+  }
+
+  .backup-card :deep(.el-button) {
+    width: 100%;
+  }
+}
 </style>
 

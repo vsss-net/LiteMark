@@ -28,11 +28,13 @@
       style="margin-bottom: 16px;"
     />
 
+    <!-- 桌面端表格 -->
     <el-table
       v-loading="loading"
       :data="filteredBookmarks"
       style="width: 100%"
       empty-text="暂无书签或未匹配到搜索结果"
+      class="desktop-table"
     >
       <el-table-column prop="title" label="标题" min-width="200">
         <template #default="{ row }">
@@ -91,11 +93,73 @@
       </el-table-column>
     </el-table>
 
+    <!-- 移动端卡片列表 -->
+    <div v-loading="loading" class="mobile-card-list">
+      <div v-if="filteredBookmarks.length === 0" class="empty-state">
+        暂无书签或未匹配到搜索结果
+      </div>
+      <div
+        v-for="(row, index) in filteredBookmarks"
+        :key="row.id"
+        class="bookmark-card"
+      >
+        <div class="card-header">
+          <div class="card-title-section">
+            <div class="card-title">{{ row.title }}</div>
+            <el-tag :type="row.visible === false ? 'info' : 'success'" class="card-tag">
+              {{ row.visible === false ? '隐藏' : '可见' }}
+            </el-tag>
+          </div>
+          <div v-if="row.description" class="card-desc">{{ row.description }}</div>
+        </div>
+        <div class="card-content">
+          <div class="card-info-item">
+            <span class="info-label">分类：</span>
+            <span class="info-value">{{ normalizeCategory(row) }}</span>
+          </div>
+          <div class="card-info-item">
+            <span class="info-label">链接：</span>
+            <a :href="row.url" target="_blank" rel="noreferrer" class="link-text">{{ row.url }}</a>
+          </div>
+        </div>
+        <div class="card-actions">
+          <el-button
+            link
+            type="primary"
+            size="small"
+            :disabled="orderSaving || index === 0"
+            @click="moveBookmark(row, -1)"
+          >
+            上移
+          </el-button>
+          <el-button
+            link
+            type="primary"
+            size="small"
+            :disabled="orderSaving || index === filteredBookmarks.length - 1"
+            @click="moveBookmark(row, 1)"
+          >
+            下移
+          </el-button>
+          <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
+          <el-button
+            link
+            type="primary"
+            size="small"
+            @click="toggleVisibility(row)"
+          >
+            {{ row.visible === false ? '可见' : '隐藏' }}
+          </el-button>
+          <el-button link type="danger" size="small" @click="deleteBookmark(row.id)">删除</el-button>
+        </div>
+      </div>
+    </div>
+
     <!-- 编辑对话框 -->
     <el-dialog
       v-model="showEditor"
       :title="editorMode === 'create' ? '新增书签' : '编辑书签'"
-      width="600px"
+      :width="isMobile ? '90%' : '600px'"
       @close="closeEditor"
     >
       <el-form :model="editorForm" label-width="80px">
@@ -143,9 +207,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref, watch, onUnmounted } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Search, Plus } from '@element-plus/icons-vue';
+// 图标已全局注册，直接使用组件名称
 
 type Bookmark = {
   id: string;
@@ -194,6 +258,12 @@ const orderSaving = ref(false);
 const storedToken = typeof window !== 'undefined' ? window.localStorage.getItem('bookmark_token') : null;
 const authToken = ref<string | null>(storedToken);
 const isAuthenticated = computed(() => Boolean(authToken.value));
+
+// 移动端检测
+const isMobile = ref(false);
+function checkMobile() {
+  isMobile.value = window.innerWidth <= 768;
+}
 
 const filteredBookmarks = computed(() => {
   const keyword = search.value.trim().toLowerCase();
@@ -428,6 +498,12 @@ onMounted(() => {
   if (isAuthenticated.value) {
     loadBookmarks();
   }
+  checkMobile();
+  window.addEventListener('resize', checkMobile);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('resize', checkMobile);
 });
 </script>
 
@@ -476,6 +552,98 @@ onMounted(() => {
   text-decoration: underline;
 }
 
+/* 桌面端表格 */
+.desktop-table {
+  display: block;
+}
+
+/* 移动端卡片列表 */
+.mobile-card-list {
+  display: none;
+}
+
+.bookmark-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s;
+}
+
+.bookmark-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.card-header {
+  margin-bottom: 12px;
+}
+
+.card-title-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  gap: 12px;
+}
+
+.card-title {
+  font-weight: 600;
+  color: #1f2933;
+  font-size: 16px;
+  flex: 1;
+  word-break: break-word;
+}
+
+.card-tag {
+  flex-shrink: 0;
+}
+
+.card-desc {
+  color: #6b7280;
+  font-size: 14px;
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+.card-content {
+  margin-bottom: 12px;
+}
+
+.card-info-item {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.info-label {
+  color: #6b7280;
+  min-width: 50px;
+  flex-shrink: 0;
+}
+
+.info-value {
+  color: #1f2933;
+  word-break: break-all;
+}
+
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: #6b7280;
+  font-size: 14px;
+}
+
 @media (max-width: 768px) {
   .page-header {
     flex-direction: column;
@@ -486,6 +654,50 @@ onMounted(() => {
   .page-actions {
     width: 100%;
     flex-wrap: wrap;
+  }
+
+  .page-actions .el-input {
+    width: 100% !important;
+    margin-right: 0 !important;
+    margin-bottom: 12px;
+  }
+
+  .page-actions .el-button {
+    width: 100%;
+  }
+
+  /* 隐藏桌面端表格 */
+  .desktop-table {
+    display: none;
+  }
+
+  /* 显示移动端卡片列表 */
+  .mobile-card-list {
+    display: block;
+  }
+
+  .card-actions {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+
+  .card-actions .el-button {
+    flex-shrink: 0;
+    white-space: nowrap;
+    font-size: 13px;
+    padding: 8px 12px;
+  }
+
+  /* 隐藏滚动条但保持滚动功能 */
+  .card-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .card-actions {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 }
 </style>
