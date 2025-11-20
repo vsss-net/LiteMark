@@ -501,11 +501,6 @@ async function saveWebDAVConfig() {
     return;
   }
 
-  if (!webdavConfig.value.url || !webdavConfig.value.username || !webdavConfig.value.password) {
-    webdavError.value = '请填写完整的 WebDAV 配置信息';
-    return;
-  }
-
   webdavSaving.value = true;
   webdavMessage.value = '';
   webdavError.value = '';
@@ -543,7 +538,6 @@ async function toggleAutoBackup(enabled: boolean) {
     return;
   }
 
-  // 如果开启但配置不完整，提示用户
   if (enabled && (!webdavConfig.value.url || !webdavConfig.value.username || !webdavConfig.value.password)) {
     ElMessage.warning('请先填写完整的 WebDAV 配置信息');
     webdavConfig.value.enabled = false; // 恢复原状态
