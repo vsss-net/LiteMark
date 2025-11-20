@@ -1,25 +1,29 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import jwt from 'jsonwebtoken';
 import { sendError } from './http.js';
-import { getAdminCredentials } from './db.js';
-import { createHash } from 'crypto';
+import { getAdminCredentials, verifyPassword } from './db.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const JWT_EXPIRES_IN = '7d';
 
-function hashPassword(password: string): string {
-  return createHash('sha256').update(password).digest('hex');
-}
-
-// 校验管理员账号密码（从数据库读取，不再依赖环境变量）
+/**
+ * 校验管理员账号密码
+ * 使用安全的 bcrypt 验证，并支持自动迁移旧格式密码
+ */
 export async function validateAdminCredentials(
   username: string,
   password: string
 ): Promise<boolean> {
   const creds = await getAdminCredentials();
   if (!creds.username) return false;
-  const hash = hashPassword(password);
-  return username === creds.username && hash === creds.passwordHash;
+  
+  // 验证用户名
+  if (username !== creds.username) {
+    return false;
+  }
+  
+  // 使用安全的密码验证（支持旧格式自动迁移）
+  return await verifyPassword(password, creds.passwordHash);
 }
 
 export function issueToken(username: string): string {

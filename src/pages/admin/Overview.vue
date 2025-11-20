@@ -35,6 +35,25 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <el-card class="info-card">
+      <template #header>
+        <h3>相关链接</h3>
+      </template>
+      <ul class="link-list">
+        <li>
+          <el-link href="https://github.com/topqaz/LiteMark" target="_blank" type="primary" :underline="false">
+            GitHub 仓库
+          </el-link>
+        </li>
+        <li>
+          <el-link href="https://github.com/topqaz/LiteMark-extension-browser" target="_blank" type="primary" :underline="false">
+            浏览器插件
+          </el-link>
+        </li>
+      </ul>
+    </el-card>
+
   </div>
 </template>
 
@@ -171,6 +190,44 @@ onMounted(() => {
 
   .stat-label {
     font-size: 13px;
+  }
+}
+
+.info-card {
+  margin-top: 24px;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+.info-card h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2933;
+}
+
+.link-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.link-list li {
+  padding: 12px 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.link-list li:last-child {
+  border-bottom: none;
+}
+
+.link-list .el-link {
+  font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .info-card {
+    margin-top: 16px;
   }
 }
 </style>

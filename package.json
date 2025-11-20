@@ -11,9 +11,11 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.678.0",
     "@element-plus/icons-vue": "^2.3.2",
+    "@types/bcrypt": "^6.0.0",
     "@vercel/blob": "^0.25.0",
     "@vercel/postgres": "^0.5.1",
     "ali-oss": "^6.20.0",
+    "bcrypt": "^6.0.0",
     "cos-nodejs-sdk-v5": "^2.15.4",
     "element-plus": "^2.11.8",
     "jsonwebtoken": "^9.0.2",

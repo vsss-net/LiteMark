@@ -1,5 +1,6 @@
 import { sql } from '@vercel/postgres';
 import { createHash } from 'crypto';
+import bcrypt from 'bcrypt';
 
 export interface BookmarkRecord {
   id: string;
@@ -23,8 +24,21 @@ export interface AdminCredentials {
   passwordHash: string;
 }
 
-function hashPassword(password: string): string {
-  return createHash('sha256').update(password).digest('hex');
+/**
+ * 使用 bcrypt 哈希密码（推荐方式）
+ * bcrypt 会自动加盐，提供更好的安全性
+ */
+async function hashPassword(password: string): Promise<string> {
+  const saltRounds = 10;
+  return await bcrypt.hash(password, saltRounds);
+}
+
+/**
+ * 检查密码哈希是否为旧格式（SHA-256，64 个十六进制字符）
+ */
+function isLegacyHash(hash: string): boolean {
+  // SHA-256 哈希是 64 个十六进制字符
+  return /^[a-f0-9]{64}$/i.test(hash);
 }
 
 // 初始化数据库表
@@ -111,7 +125,7 @@ export async function getAdminCredentials(): Promise<AdminCredentials> {
     // 初始化默认管理员账号：admin / admin123
     const defaultUsername = 'admin';
     const defaultPassword = 'admin123';
-    const passwordHash = hashPassword(defaultPassword);
+    const passwordHash = await hashPassword(defaultPassword);
 
     await sql`
       INSERT INTO admin_credentials (id, username, password_hash, updated_at)
@@ -138,7 +152,7 @@ export async function updateAdminCredentials(
 ): Promise<AdminCredentials> {
   await ensureTables();
   const trimmedUsername = username.trim();
-  const passwordHash = hashPassword(password);
+  const passwordHash = await hashPassword(password);
 
   await sql`
     INSERT INTO admin_credentials (id, username, password_hash, updated_at)
@@ -154,6 +168,38 @@ export async function updateAdminCredentials(
     username: trimmedUsername,
     passwordHash
   };
+}
+
+/**
+ * 验证密码（支持新 bcrypt 和旧 SHA-256 格式）
+ * 如果验证成功且是旧格式，会自动迁移到 bcrypt
+ */
+export async function verifyPassword(
+  password: string,
+  storedHash: string
+): Promise<boolean> {
+  // 检查是否为旧格式（SHA-256）
+  if (isLegacyHash(storedHash)) {
+    // 使用旧方式验证
+    const hash = createHash('sha256').update(password).digest('hex');
+    const isValid = hash === storedHash;
+    
+    // 如果验证成功，自动迁移到 bcrypt
+    if (isValid) {
+      const newHash = await hashPassword(password);
+      await sql`
+        UPDATE admin_credentials
+        SET password_hash = ${newHash}, updated_at = CURRENT_TIMESTAMP
+        WHERE id = 1
+      `;
+      console.log('[密码安全] 已自动将旧密码哈希迁移到 bcrypt');
+    }
+    
+    return isValid;
+  }
+  
+  // 使用 bcrypt 验证
+  return await bcrypt.compare(password, storedHash);
 }
 
 function normalizeCategory(category?: string | null): string {

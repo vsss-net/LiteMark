@@ -73,7 +73,7 @@
     <!-- 底栏 -->
     <el-footer class="footer-bar">
       <p class="footer-copyright">
-        © {{ new Date().getFullYear() }} LiteMark. All rights reserved.
+        © {{ getShanghaiYear() }} LiteMark. All rights reserved.
       </p>
     </el-footer>
   </el-container>
@@ -82,6 +82,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { getShanghaiYear } from '../utils/date.js';
 import { ElMessage } from 'element-plus';
 import {
   User,
@@ -95,7 +96,8 @@ import {
   Document,
   Upload,
   UserFilled,
-  Menu
+  Menu,
+  InfoFilled
 } from '@element-plus/icons-vue';
 
 const route = useRoute();
@@ -122,7 +124,8 @@ const navItems = [
   { path: '/admin/categories', title: '分类管理', icon: Document },
   { path: '/admin/backup', title: '数据备份', icon: Upload },
   { path: '/admin/settings', title: '系统设置', icon: Setting },
-  { path: '/admin/account', title: '账号管理', icon: UserFilled }
+  { path: '/admin/account', title: '账号管理', icon: UserFilled },
+  { path: '/admin/about', title: '关于', icon: InfoFilled }
 ];
 
 // 当前激活路由
